@@ -1878,8 +1878,8 @@ struct dlent {
     char *name;            /* The name/path of the entry.                 */
     int is_dir;            /* If the entry is a directory and not a file. */
     off_t size;            /* The size of the entry, in bytes.            */
-    /*            1023 .   9  ' ' KiB '\0' */
-    char *filesize[4 + 1 + 1 + 1 + 3 + 1];
+    /*           1023 .   9  ' ' KiB '\0' */
+    char filesize[4 + 1 + 1 + 1 + 3 + 1];
     struct timespec mtime; /* When the file was last modified.            */
 };
 
@@ -1891,16 +1891,14 @@ static int dlent_cmp(const void *a, const void *b) {
                   (*((const struct dlent * const *)b))->name);
 }
 
-static void iec_size(struct dlent **list, size_t entries, float size) {
+static void iec_size(struct dlent **list, const size_t entries, float size) {
     char *size_units[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"};
     int i = 0;
 
-    while (size >= 1024) {
-        i++;
-        size /= 1024;
-    }
+    for (i = 0; size >= 1024; size /= 1024, i++)
+        ;
     /*                                           Don't use decimal places for Bytes. That would be silly */
-    sprintf(list[entries]->filesize, "%5.*f %s", (1 && i), size, size_units[i]);
+    sprintf(list[entries]->filesize, "%6.*f %s", (1 && i), size, size_units[i]);
 }
 
 /* Make sorted list of files in a directory.  Returns number of entries, or -1
@@ -2096,7 +2094,9 @@ static void generate_dir_listing(struct connection *conn, const char *path,
             strftime(buf, sizeof buf, DIR_LIST_MTIME_FORMAT, &tm);
             append(listing, buf);
             //~ appendf(listing, " %10llu ", llu(list[i]->size));
-            appendf(listing, " %s\n", list[i]->filesize);
+            append(listing, " ");
+            append(listing, list[i]->filesize);
+            append(listing, "\n");
         }
     }
 
