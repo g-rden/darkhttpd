@@ -482,20 +482,6 @@ static void append(struct apbuf *buf, const char *s) {
 }
 #endif
 
-static void appendf(struct apbuf *buf, const char *format, ...)
-    __printflike(2, 3);
-static void appendf(struct apbuf *buf, const char *format, ...) {
-    char *tmp;
-    va_list va;
-    size_t len;
-
-    va_start(va, format);
-    len = xvasprintf(&tmp, format, va);
-    va_end(va);
-    appendl(buf, tmp, len);
-    free(tmp);
-}
-
 /* Make the specified socket non-blocking. */
 static void nonblock_socket(const int sock) {
     int flags = fcntl(sock, F_GETFL);
@@ -1877,7 +1863,6 @@ static int file_exists(const char *path) {
 struct dlent {
     char *name;            /* The name/path of the entry.                 */
     int is_dir;            /* If the entry is a directory and not a file. */
-    off_t size;            /* The size of the entry, in bytes.            */
     /*           1023 .   9  ' ' KiB '\0' */
     char filesize[4 + 1 + 1 + 1 + 3 + 1];
     struct timespec mtime; /* When the file was last modified.            */
@@ -1893,7 +1878,7 @@ static int dlent_cmp(const void *a, const void *b) {
 
 static void iec_size(struct dlent **list, const size_t entries, float size) {
     char *size_units[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"};
-    int i = 0;
+    int i;
 
     for (i = 0; size >= 1024; size /= 1024, i++)
         ;
@@ -1939,7 +1924,6 @@ static ssize_t make_sorted_dirlist(const char *path, struct dlent ***output) {
         list[entries] = xmalloc(sizeof(struct dlent));
         list[entries]->name = xstrdup(ent->d_name);
         list[entries]->is_dir = S_ISDIR(s.st_mode);
-        list[entries]->size = s.st_size;
         iec_size(list, entries, s.st_size);
         list[entries]->mtime = s.st_mtim;
         entries++;
@@ -2093,7 +2077,6 @@ static void generate_dir_listing(struct connection *conn, const char *path,
             localtime_r(&list[i]->mtime.tv_sec, &tm);
             strftime(buf, sizeof buf, DIR_LIST_MTIME_FORMAT, &tm);
             append(listing, buf);
-            //~ appendf(listing, " %10llu ", llu(list[i]->size));
             append(listing, " ");
             append(listing, list[i]->filesize);
             append(listing, "\n");
