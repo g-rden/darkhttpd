@@ -2013,7 +2013,7 @@ static void generate_dir_listing(struct connection *conn, const char *path,
     char date[DATE_LEN], *spaces;
     struct dlent **list;
     ssize_t listsize;
-    size_t maxlen = 2; /* There has to be ".." */
+    size_t maxlen = 3; /* There has to be ".." */
     int i;
     struct apbuf *listing;
 
@@ -2034,6 +2034,8 @@ static void generate_dir_listing(struct connection *conn, const char *path,
 
     for (i=0; i<listsize; i++) {
         size_t tmp = strlen(list[i]->name);
+        if (list[i]->is_dir)
+            tmp++; /* add 1 for '/' */
         if (maxlen < tmp)
             maxlen = tmp;
     }
@@ -2067,15 +2069,20 @@ static void generate_dir_listing(struct connection *conn, const char *path,
         append_escaped(listing, list[i]->name);
         append(listing, "</a>");
 
-        if (list[i]->is_dir)
-            append(listing, "/\n");
+        char buf[DIR_LIST_MTIME_SIZE];
+        struct tm tm;
+        localtime_r(&list[i]->mtime.tv_sec, &tm);
+        strftime(buf, sizeof buf, DIR_LIST_MTIME_FORMAT, &tm);
+
+        if (list[i]->is_dir) {
+            append(listing, "/");
+            appendl(listing, spaces, maxlen-strlen(list[i]->name));
+            append(listing, buf);
+            append(listing, "\n");
+        }
         else {
             appendl(listing, spaces, maxlen-strlen(list[i]->name));
             append(listing, " ");
-            char buf[DIR_LIST_MTIME_SIZE];
-            struct tm tm;
-            localtime_r(&list[i]->mtime.tv_sec, &tm);
-            strftime(buf, sizeof buf, DIR_LIST_MTIME_FORMAT, &tm);
             append(listing, buf);
             append(listing, " ");
             append(listing, list[i]->filesize);
