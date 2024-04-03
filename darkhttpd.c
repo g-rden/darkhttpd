@@ -2019,7 +2019,6 @@ static void generate_dir_listing(struct connection *conn, const char *path,
     char date[DATE_LEN];
     struct dlent **list;
     ssize_t listsize;
-    size_t maxlen = 3; /* There has to be ".." */
     int i;
     struct apbuf *listing;
 
@@ -2036,14 +2035,6 @@ static void generate_dir_listing(struct connection *conn, const char *path,
             default_reply(conn, 500, "Internal Server Error",
                 "Couldn't list directory: %s", strerror(errno));
         return;
-    }
-
-    for (i=0; i<listsize; i++) {
-        size_t tmp = strlen(list[i]->name);
-        if (list[i]->is_dir)
-            tmp++; /* add 1 for '/' */
-        if (maxlen < tmp)
-            maxlen = tmp;
     }
 
     listing = make_apbuf();
