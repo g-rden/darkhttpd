@@ -2047,7 +2047,7 @@ static void generate_dir_listing(struct connection *conn, const char *path,
             "table {font-family: monospace; border-collapse: collapse; width: max-content;}\n"
             "td {padding-right: 1em}\n"
             ".s {text-align: right}\n"
-            "tr:nth-child(2n) {background-color: #eee}\n"
+            "tr:nth-child(2n+1) {background-color: #eee}\n"
             "tr:hover {background-color: #bbb}\n"
             "</style>\n"
             "</head>\n<body>\n<h1>");
