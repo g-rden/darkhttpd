@@ -2050,7 +2050,11 @@ static void generate_dir_listing(struct connection *conn, const char *path,
 
     /* append ".." entry if not in wwwroot */
     if (strcmp(path, "./") != 0)
-        append(listing, "<a href=\"../\">..</a>/\n");
+        append(listing,
+                "<tr>"
+                "<td><a href=\"../\">..</a>/</td>"
+                "<td></td><td></td>"
+                "</tr>");
 
     for (i=0; i<listsize; i++) {
         /* If a filename is made up of entirely unsafe chars,
