@@ -482,20 +482,6 @@ static void append(struct apbuf *buf, const char *s) {
 }
 #endif
 
-static void appendf(struct apbuf *buf, const char *format, ...)
-    __printflike(2, 3);
-static void appendf(struct apbuf *buf, const char *format, ...) {
-    char *tmp;
-    va_list va;
-    size_t len;
-
-    va_start(va, format);
-    len = xvasprintf(&tmp, format, va);
-    va_end(va);
-    appendl(buf, tmp, len);
-    free(tmp);
-}
-
 /* Make the specified socket non-blocking. */
 static void nonblock_socket(const int sock) {
     int flags = fcntl(sock, F_GETFL);
@@ -1883,13 +1869,24 @@ static int file_exists(const char *path) {
 struct dlent {
     char *name;            /* The name/path of the entry.                 */
     int is_dir;            /* If the entry is a directory and not a file. */
-    off_t size;            /* The size of the entry, in bytes.            */
+    /*           1023 .   9  ' ' KiB '\0' */
+    char filesize[4 + 1 + 1 + 1 + 3 + 1];
     struct timespec mtime; /* When the file was last modified.            */
 };
 
 static int dlent_cmp(const void *a, const void *b) {
     return strcmp((*((const struct dlent * const *)a))->name,
                   (*((const struct dlent * const *)b))->name);
+}
+
+static void iec_size(struct dlent **list, const size_t entries, float size) {
+    char *size_units[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"};
+    int i;
+
+    for (i = 0; size >= 1024; size /= 1024, i++)
+        ;
+    /*                                           Don't use decimal places for Bytes. That would be silly */
+    sprintf(list[entries]->filesize, "%.*f %s", (1 && i), size, size_units[i]);
 }
 
 /* Make sorted list of files in a directory.  Returns number of entries, or -1
@@ -1927,7 +1924,7 @@ static ssize_t make_sorted_dirlist(const char *path, struct dlent ***output) {
         list[entries] = xmalloc(sizeof(struct dlent));
         list[entries]->name = xstrdup(ent->d_name);
         list[entries]->is_dir = S_ISDIR(s.st_mode);
-        list[entries]->size = s.st_size;
+        iec_size(list, entries, s.st_size);
         list[entries]->mtime = s.st_mtim;
         entries++;
     }
@@ -2013,7 +2010,7 @@ static void append_escaped(struct apbuf *dst, const char *src) {
 
 static void generate_dir_listing(struct connection *conn, const char *path,
         const char *decoded_url) {
-    char date[DATE_LEN], *spaces;
+    char date[DATE_LEN];
     struct dlent **list;
     ssize_t listsize;
     size_t maxlen = 3; /* There has to be ".." */
@@ -2035,30 +2032,30 @@ static void generate_dir_listing(struct connection *conn, const char *path,
         return;
     }
 
-    for (i=0; i<listsize; i++) {
-        size_t tmp = strlen(list[i]->name);
-        if (list[i]->is_dir)
-            tmp++; /* add 1 for '/' */
-        if (maxlen < tmp)
-            maxlen = tmp;
-    }
-
     listing = make_apbuf();
     append(listing, "<!DOCTYPE html>\n<html>\n<head>\n<title>");
     append_escaped(listing, decoded_url);
     append(listing,
             "</title>\n"
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+            "<style>\n"
+            "table {font-family: monospace; border-collapse: collapse; width: max-content;}\n"
+            "td {padding-right: 1em}\n"
+            ".s {text-align: right}\n"
+            "tr:nth-child(2n+1) {background-color: #eee}\n"
+            "tr:hover {background-color: #bbb}\n"
+            "</style>\n"
             "</head>\n<body>\n<h1>");
     append_escaped(listing, decoded_url);
-    append(listing, "</h1>\n<pre>\n");
-
-    spaces = xmalloc(maxlen);
-    memset(spaces, ' ', maxlen);
+    append(listing, "</h1>\n<table>\n");
 
     /* append ".." entry if not in wwwroot */
-    if (strncmp(path, wwwroot, strlen(path) - 1) != 0)
-        append(listing, "<a href=\"../\">..</a>/\n");
+    if (strcmp(path, "./") != 0)
+        append(listing,
+                "<tr>"
+                "<td><a href=\"../\">..</a>/</td>"
+                "<td></td><td></td>"
+                "</tr>");
 
     for (i=0; i<listsize; i++) {
         /* If a filename is made up of entirely unsafe chars,
@@ -2068,7 +2065,7 @@ static void generate_dir_listing(struct connection *conn, const char *path,
 
         urlencode(list[i]->name, safe_url);
 
-        append(listing, "<a href=\"");
+        append(listing, "<tr><td><a href=\"");
         append(listing, safe_url);
         if (list[i]->is_dir)
             append(listing, "/");
@@ -2082,24 +2079,23 @@ static void generate_dir_listing(struct connection *conn, const char *path,
         strftime(buf, sizeof buf, DIR_LIST_MTIME_FORMAT, &tm);
 
         if (list[i]->is_dir) {
-            append(listing, "/");
-            appendl(listing, spaces, maxlen-strlen(list[i]->name));
+            append(listing, "/</td><td>");
             append(listing, buf);
-            append(listing, "\n");
+            append(listing, "</td><td></td></tr>\n");
         }
         else {
-            appendl(listing, spaces, maxlen-strlen(list[i]->name));
-            append(listing, " ");
+            append(listing, "</td><td>");
             append(listing, buf);
-            appendf(listing, " %10llu\n", llu(list[i]->size));
+            append(listing, "</td><td class=\"s\">");
+            append(listing, list[i]->filesize);
+            append(listing, "</td></tr>\n");
         }
     }
 
     cleanup_sorted_dirlist(list, listsize);
     free(list);
-    free(spaces);
 
-    append(listing, "</pre>\n<hr>\n");
+    append(listing, "</table>\n<hr>\n");
 
     rfc1123_date(date, now);
     append(listing, generated_on(date));
